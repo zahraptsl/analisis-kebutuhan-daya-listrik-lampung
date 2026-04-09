@@ -1,0 +1,183 @@
+---
+title: "CODE KELOMPOK 9 RA"
+author: "KELOMPOK 9 RA"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+```
+
+```{r}
+data <- read_excel("D://KOMSTAT//tubes//data_listrik.xlsx") %>%
+  mutate(across(starts_with("X_"), ~ as.numeric(gsub(",", ".", .))))
+head(data)
+```
+
+```{r}
+# Ubah Format Data (Wide → Long) ---
+data_long <- data %>%
+  pivot_longer(cols = starts_with("X_"), 
+               names_to = "Tahun", 
+               values_to = "Kebutuhan_Daya") %>%
+  mutate(
+    Tahun = as.numeric(gsub("X_", "", Tahun))
+  )
+```
+
+
+```{r}
+# Hitung Total Kebutuhan Daya Lampung per Tahun
+data_total <- data_long %>%
+  group_by(Tahun) %>%
+  summarise(Kebutuhan_Daya = sum(Kebutuhan_Daya, na.rm = TRUE))
+data_total
+```
+
+
+```{r}
+# Fungsi 1: Statistik Deskriptif
+statistik_daya <- function(data){
+  rata2 <- mean(data$Kebutuhan_Daya)
+  sd_val <- sd(data$Kebutuhan_Daya)
+  max_val <- max(data$Kebutuhan_Daya)
+  min_val <- min(data$Kebutuhan_Daya)
+  
+  hasil <- data.frame(
+    Rata_rata = rata2, 
+    SD = sd_val, 
+    Maksimum = max_val, 
+    Minimum = min_val
+  )
+  return(hasil)
+}
+
+statistik_daya(data_total)
+```
+
+
+```{r}
+# Fungsi 2: Pertumbuhan Tahunan (%)
+pertumbuhan_tahunan <- function(data){
+  data$Pertumbuhan <- c(NA, diff(data$Kebutuhan_Daya) / head(data$Kebutuhan_Daya, -1) * 100)
+  return(data)
+}
+
+data_pertumbuhan <- pertumbuhan_tahunan(data_total)
+data_pertumbuhan
+```
+
+
+```{r}
+# Fungsi 3: Prediksi Daya (Regresi Linear)
+prediksi_daya <- function(data, tahun_pred = 2031){
+  model <- lm(Kebutuhan_Daya ~ Tahun, data = data)
+  hasil_pred <- predict(model, newdata = data.frame(Tahun = tahun_pred))
+  return(list(
+    Summary_Model = summary(model),
+    Prediksi_Tahun = tahun_pred,
+    Nilai_Prediksi = hasil_pred
+  ))
+}
+
+prediksi_daya(data_total, tahun_pred = 2031)
+```
+```{r}
+# Fungsi 4: Plot Tren Kebutuhan Daya
+plot_daya <- function(data){
+  ggplot(data, aes(x = Tahun, y = Kebutuhan_Daya)) +
+    geom_line(color = "blue", size = 1) +
+    geom_point(color = "red", size = 3) +
+    ggtitle("Tren Kebutuhan Daya Listrik Provinsi Lampung (2025–2030)") +
+    ylab("Kebutuhan Daya (kVa)") +
+    xlab("Tahun") +
+    theme_minimal()
+}
+
+plot_daya(data_total)
+```
+
+```{r}
+# Membuat konstruktor kelas S3 "ListrikData"
+ListrikData <- function(nama_provinsi, tahun, kebutuhan_daya){
+  # Validasi data
+  if(length(tahun) != length(kebutuhan_daya)){
+    stop("Panjang data tahun dan kebutuhan_daya harus sama.")
+  }
+  if(any(kebutuhan_daya < 0)){
+    stop("Nilai kebutuhan daya tidak boleh negatif.")
+  }
+  
+  # Membuat objek sebagai list
+  obj <- list(
+    provinsi = nama_provinsi,
+    tahun = tahun,
+    kebutuhan_daya = kebutuhan_daya
+  )
+  
+  # Menetapkan kelas S3
+  class(obj) <- "ListrikData"
+  return(obj)
+}
+
+# Membuat method print untuk kelas S3 (fungsi generik)
+print.ListrikData <- function(obj){
+  cat("=== Data Kebutuhan Daya Listrik ===\n")
+  cat("Provinsi :", obj$provinsi, "\n")
+  cat("Periode  :", min(obj$tahun), "-", max(obj$tahun), "\n")
+  cat("Rata-rata Kebutuhan Daya :", mean(obj$kebutuhan_daya), "\n")
+}
+
+objek_listrik <- ListrikData(
+  nama_provinsi = "Lampung",
+  tahun = data_total$Tahun,
+  kebutuhan_daya = data_total$Kebutuhan_Daya
+)
+
+print(objek_listrik)
+```
+
+
+```{r}
+# Membuat method summary untuk kelas S3
+summary.ListrikData <- function(obj){
+  cat("Ringkasan Statistik Kebutuhan Daya", "\n")
+  hasil <- data.frame(
+    Minimum = min(obj$kebutuhan_daya),
+    Maksimum = max(obj$kebutuhan_daya),
+    Rata_rata = mean(obj$kebutuhan_daya),
+    SD = sd(obj$kebutuhan_daya)
+  )
+  print(hasil)
+}
+
+summary(objek_listrik)
+```
+
+
+```{r}
+# Membuat fungsi generik tambahan (misalnya: kategori_daya)
+kategori_daya <- function(obj){
+  UseMethod("kategori_daya")
+}
+
+# Method untuk class ListrikData
+kategori_daya.ListrikData <- function(obj){
+  rata2 <- mean(obj$kebutuhan_daya)
+  if(rata2 > 100000) {
+    cat("Kategori Daya: Tinggi\n")
+  } else if(rata2 > 50000) {
+    cat("Kategori Daya: Sedang\n")
+  } else {
+    cat("Kategori Daya: Rendah\n")
+  }
+}
+
+kategori_daya(objek_listrik)
+```
